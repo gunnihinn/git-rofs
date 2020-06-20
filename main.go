@@ -2,33 +2,62 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/jacobsa/fuse"
 	"github.com/jacobsa/fuse/fuseutil"
 )
 
+var msgHelp string = strings.TrimSpace(`
+git-rofs - Mount Git commits as read-only filesystems
+
+USE
+
+    git-rofs [OPTION...] MOUNTPOINT
+`)
+
 type GitROFS struct {
 	fuseutil.FileSystem
 }
 
 func main() {
-	mountPoint := "/tmp/nofs"
+	flags := struct {
+		help *bool
+	}{
+		flag.Bool("help", false, "Print help and exit"),
+	}
+	flag.Parse()
+
+	if *flags.help {
+		fmt.Printf("%s\n", msgHelp)
+		return
+	}
+
+	if len(flag.Args()) < 1 {
+		fmt.Printf("Required argument MOUNTPOINT missing.\n")
+		fmt.Printf("%s\n", msgHelp)
+		os.Exit(1)
+	}
+
+	mountPoint := flag.Arg(0)
 
 	fs := GitROFS{
 		&fuseutil.NotImplementedFileSystem{},
 	}
 
-	fmt.Println("Creating server")
+	log.Printf("Creating server\n")
 	server := fuseutil.NewFileSystemServer(fs)
 
-	fmt.Println("Mounting filesystem")
+	log.Printf("Mounting filesystem\n")
 	mfs, err := fuse.Mount(mountPoint, server, &fuse.MountConfig{})
 	if err != nil {
-		panic(err)
+		log.Panic(err)
 	}
 
 	sigs := make(chan os.Signal, 1)
@@ -36,13 +65,13 @@ func main() {
 
 	go func() {
 		<-sigs
-		fmt.Println("Unmounting filesystem")
+		log.Printf("Unmounting filesystem\n")
 		if err := fuse.Unmount(mountPoint); err != nil {
-			panic(err)
+			log.Panic(err)
 		}
 	}()
 
-	fmt.Println("Serving files")
+	log.Printf("Serving files\n")
 	mfs.Join(context.Background())
-	fmt.Println("Done")
+	log.Printf("Done\n")
 }
