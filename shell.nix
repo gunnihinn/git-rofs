@@ -3,7 +3,9 @@ let
   pkgs = import sources.nixpkgs {};
 in
 pkgs.mkShell {
-  buildInputs = with pkgs; [
-    go
+  buildInputs = [
+    pkgs.go
   ];
+
+  GOPATH="$(pwd)/.go";
 }

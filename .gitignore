@@ -1,1 +1,4 @@
 go-rofs
+token.txt
+*.swp
+.go/
