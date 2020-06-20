@@ -1,4 +1,29 @@
 {
+    "fuse": {
+        "branch": "master",
+        "description": "A Go package for implementing a FUSE file system.",
+        "homepage": null,
+        "owner": "jacobsa",
+        "repo": "fuse",
+        "rev": "1d001802f70a3ce054a847706e0f36466242adc2",
+        "sha256": "0r7lpqxjqzyqk2h9mrwayy870byiy82rl3n6nkxahkz141d3a9ak",
+        "type": "tarball",
+        "url": "https://github.com/jacobsa/fuse/archive/1d001802f70a3ce054a847706e0f36466242adc2.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "git2go": {
+        "branch": "master",
+        "description": "Git to Go; bindings for libgit2. Like McDonald's but tastier.",
+        "homepage": "",
+        "owner": "libgit2",
+        "repo": "git2go",
+        "rev": "33dac3d46077ef71ed97ba232a0a53b793f1ca7e",
+        "sha256": "0v522l4zqgi9n9y9cfz67rp43avmc93qslr1c3x1zmhxnh8v5h5w",
+        "type": "tarball",
+        "url": "https://github.com/libgit2/git2go/archive/33dac3d46077ef71ed97ba232a0a53b793f1ca7e.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz",
+        "version": "30.0.3"
+    },
     "niv": {
         "branch": "master",
         "description": "Easy dependency management for Nix projects",
@@ -12,15 +37,15 @@
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     },
     "nixpkgs": {
-        "branch": "nixos-19.09",
+        "branch": "nixos-20.03",
         "description": "A read-only mirror of NixOS/nixpkgs tracking the released channels. Send issues and PRs to",
         "homepage": "https://github.com/NixOS/nixpkgs",
         "owner": "NixOS",
         "repo": "nixpkgs-channels",
-        "rev": "8260cd5bc65fad88ad8881b32c990e5659cc417a",
-        "sha256": "0lxpjly889jksyf944nm25f0syqdxy2ya3p7cdzz4wfqbr76blln",
+        "rev": "2b417708c282d84316366f4125b00b29c49df10f",
+        "sha256": "0426qaxw09h0kkn5zwh126hfb2j12j5xan6ijvv2c905pqi401zq",
         "type": "tarball",
-        "url": "https://github.com/NixOS/nixpkgs-channels/archive/8260cd5bc65fad88ad8881b32c990e5659cc417a.tar.gz",
+        "url": "https://github.com/NixOS/nixpkgs-channels/archive/2b417708c282d84316366f4125b00b29c49df10f.tar.gz",
         "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
     }
 }
