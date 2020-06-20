@@ -12,6 +12,7 @@ import (
 
 	"github.com/jacobsa/fuse"
 	"github.com/jacobsa/fuse/fuseutil"
+	"github.com/libgit/git2go"
 )
 
 var msgHelp string = strings.TrimSpace(`
@@ -19,7 +20,16 @@ git-rofs - Mount Git commits as read-only filesystems
 
 USE
 
-    git-rofs [OPTION...] MOUNTPOINT
+    git-rofs [OPTION...] ROOT MOUNTPOINT
+
+ARGUMENTS
+
+    ROOT            A Git repository
+    MOUNTPOINT      A directory to mount filesystem on
+
+OPTIONS
+
+    -h, -help   Print help and exit
 `)
 
 type GitROFS struct {
@@ -28,24 +38,26 @@ type GitROFS struct {
 
 func main() {
 	flags := struct {
-		help *bool
+		help_s *bool
+		help_l *bool
 	}{
-		flag.Bool("help", false, "Print help and exit"),
+		help_s: flag.Bool("h", false, "Print help and exit"),
+		help_l: flag.Bool("help", false, "Print help and exit"),
 	}
 	flag.Parse()
 
-	if *flags.help {
+	if *flags.help_s || *flags.help_l {
 		fmt.Printf("%s\n", msgHelp)
 		return
 	}
 
-	if len(flag.Args()) < 1 {
-		fmt.Printf("Required argument MOUNTPOINT missing.\n")
+	if len(flag.Args()) < 2 {
+		fmt.Printf("Required arguments missing.\n")
 		fmt.Printf("%s\n", msgHelp)
 		os.Exit(1)
 	}
 
-	mountPoint := flag.Arg(0)
+	mountPoint := flag.Arg(1)
 
 	fs := GitROFS{
 		&fuseutil.NotImplementedFileSystem{},
