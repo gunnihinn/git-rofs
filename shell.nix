@@ -5,6 +5,8 @@ in
 pkgs.mkShell {
   buildInputs = [
     pkgs.go
+    pkgs.libgit2
+    pkgs.pkg-config
   ];
 
   GOPATH="$(pwd)/.go";

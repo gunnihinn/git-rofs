@@ -12,7 +12,7 @@ import (
 
 	"github.com/jacobsa/fuse"
 	"github.com/jacobsa/fuse/fuseutil"
-	"github.com/libgit/git2go"
+	"gopkg.in/libgit2/git2go.v27"
 )
 
 var msgHelp string = strings.TrimSpace(`
@@ -34,6 +34,7 @@ OPTIONS
 
 type GitROFS struct {
 	fuseutil.FileSystem
+	*git.Repository
 }
 
 func main() {
@@ -57,10 +58,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	root := flag.Arg(0)
 	mountPoint := flag.Arg(1)
+
+	repo, err := git.OpenRepository(root)
+	if err != nil {
+		log.Panic(err)
+	}
 
 	fs := GitROFS{
 		&fuseutil.NotImplementedFileSystem{},
+		repo,
 	}
 
 	log.Printf("Creating server\n")

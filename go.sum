@@ -4,3 +4,5 @@ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 golang.org/x/sys v0.0.0-20200620081246-981b61492c35 h1:wb/9mP8eUAmHfkM8RmpeLq6nUA7c2i5+bQOtcDftjaE=
 golang.org/x/sys v0.0.0-20200620081246-981b61492c35/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+gopkg.in/libgit2/git2go.v27 v27.10.0 h1:s1agr31oIhmachsgOvUpRHzmnBmrQPzkSYX84K9mi4M=
+gopkg.in/libgit2/git2go.v27 v27.10.0/go.mod h1:lKrzYfERNvPdRbevxLdKadsT0XwHJ10JC05CXIQgmWc=
