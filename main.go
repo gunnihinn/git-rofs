@@ -151,6 +151,7 @@ func (fs GitROFS) ForgetInode(ctx context.Context, op *fuseops.ForgetInodeOp) er
 func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAttributesOp) error {
 	log.Printf("GetInodeAttributes: Inode %d\n", op.Inode)
 	if op.Inode == fuseops.RootInodeID {
+        // TODO: fn : git object -> fuseops.InodeAttributes
 		op.Attributes = fuseops.InodeAttributes{
 			Size:  0,
 			Nlink: 1,
@@ -253,10 +254,10 @@ func (fs GitROFS) OpenFile(ctx context.Context, op *fuseops.OpenFileOp) error {
 
 func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 	log.Printf("ReadDir\n")
+	log.Printf(".. inode %d\n", op.Inode)
 
 	entries := []fuseutil.Dirent{
 		fuseutil.Dirent{
-			Offset: fuseops.DirOffset(1),
 			Inode:  fuseops.InodeID(2),
 			Name:   "file!",
 			Type:   fuseutil.DT_File,
