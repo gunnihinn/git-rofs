@@ -151,8 +151,21 @@ func (fs GitROFS) ForgetInode(ctx context.Context, op *fuseops.ForgetInodeOp) er
 func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAttributesOp) error {
 	log.Printf("GetInodeAttributes: Inode %d\n", op.Inode)
 	if op.Inode == fuseops.RootInodeID {
-		op.Attributes.Nlink = 1
-		op.Attributes.Mode = 0555 | os.ModeDir
+		op.Attributes = fuseops.InodeAttributes{
+			Size:  0,
+			Nlink: 1,
+			Mode:  0555 | os.ModeDir,
+
+			Atime:  time.Now(),
+			Mtime:  time.Now(),
+			Ctime:  time.Now(),
+			Crtime: time.Now(),
+
+			Uid: fs.uid,
+			Gid: fs.gid,
+		}
+		op.AttributesExpiration = time.Now().Add(time.Duration(24) * time.Hour)
+
 		return nil
 	}
 	return fmt.Errorf("GetInodeAttributes")
@@ -196,7 +209,7 @@ func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) er
 	if n, ok = fs.inodes.nodes[coords]; !ok {
 		fs.inodes.lastIssuedID++
 
-        // TODO: Look up file/dir info in git repo
+		// TODO: Look up file/dir info in git repo
 		n = Inode{
 			node: fuseops.ChildInodeEntry{
 				Child: fs.inodes.lastIssuedID,
@@ -213,6 +226,8 @@ func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) er
 					Uid: fs.uid,
 					Gid: fs.gid,
 				},
+				AttributesExpiration: time.Now().Add(time.Duration(24) * time.Hour),
+				EntryExpiration:      time.Now().Add(time.Duration(24) * time.Hour),
 			},
 		}
 		fs.inodes.nodes[coords] = n
