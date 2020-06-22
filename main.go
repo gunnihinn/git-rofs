@@ -35,58 +35,127 @@ ARGUMENTS
 OPTIONS
 
     -h, -help   Print help and exit
-`)
+	`)
 
-type InodeCoords struct {
-	parent fuseops.InodeID
-	name   string
-}
-
-type Inode struct {
-	node fuseops.ChildInodeEntry
+type coords struct {
+	id   fuseops.InodeID
+	name string
 }
 
 type InodeMap struct {
 	*sync.Mutex
-	nodes        map[InodeCoords]Inode
+	byId         map[fuseops.InodeID]*git.TreeEntry // Could be *git.Oid?
+	byParent     map[coords]fuseops.InodeID
+	repo         *git.Repository
 	lastIssuedID fuseops.InodeID
 }
 
-func NewInodeMap() InodeMap {
+func NewInodeMap(repo *git.Repository, root *git.Commit) (InodeMap, error) {
 	im := InodeMap{
 		Mutex:        &sync.Mutex{},
-		nodes:        make(map[InodeCoords]Inode),
+		byId:         make(map[fuseops.InodeID]*git.TreeEntry),
+		byParent:     make(map[coords]fuseops.InodeID),
+		repo:         repo,
 		lastIssuedID: fuseops.InodeID(1),
 	}
 
-	return im
-}
-
-type HandleMaker struct {
-	*sync.Mutex // Could be an atomic but whatever
-	lastIssued  fuseops.HandleID
-}
-
-func NewHandleMaker() HandleMaker {
-	return HandleMaker{
-		Mutex:      &sync.Mutex{},
-		lastIssued: fuseops.HandleID(0),
+	tree, err := root.Tree()
+	if err != nil {
+		return im, err
 	}
+
+	e := &git.TreeEntry{
+		Name:     "",
+		Id:       tree.Id(),
+		Type:     git.ObjectTree,
+		Filemode: git.FilemodeTree,
+	}
+
+	im.byId[im.lastIssuedID] = e
+
+	return im, nil
 }
 
-func (hm HandleMaker) Issue() fuseops.HandleID {
-	hm.Lock()
-	defer hm.Unlock()
-	hm.lastIssued++
-	return hm.lastIssued
+// Get gets an entry by inode ID.
+// Caller must lock/unlock mutex.
+func (im InodeMap) Get(i fuseops.InodeID) (*git.TreeEntry, error) {
+	node, ok := im.byId[i]
+	if !ok {
+		return nil, fmt.Errorf("No inode number %d", i)
+	}
+
+	return node, nil
+}
+
+func (fs GitROFS) toInodeAttributes(entry *git.TreeEntry) (fuseops.InodeAttributes, error) {
+	attrs := fuseops.InodeAttributes{
+		// TODO: What is time?
+		Atime:  time.Now(),
+		Mtime:  time.Now(),
+		Ctime:  time.Now(),
+		Crtime: time.Now(),
+		Uid:    fs.uid,
+		Gid:    fs.gid,
+	}
+
+	if entry.Type == git.ObjectBlob {
+		blob, err := fs.repo.LookupBlob(entry.Id)
+		if err != nil {
+			return attrs, err
+		}
+		attrs.Size = uint64(blob.Size())
+		attrs.Nlink = 1
+		attrs.Mode = 0644
+	} else if entry.Type == git.ObjectTree {
+		tree, err := fs.repo.LookupTree(entry.Id)
+		if err != nil {
+			return attrs, err
+		}
+		attrs.Size = 0
+		attrs.Nlink = uint32(tree.EntryCount()) + 2
+		attrs.Mode = 0755 | os.ModeDir
+	} else {
+		return attrs, fmt.Errorf("Unexpected inode type %v", entry.Type)
+	}
+
+	return attrs, nil
+}
+
+// Lookup gets a child of a given inode by name.
+// Caller must lock/unlock mutex.
+func (im InodeMap) Lookup(i fuseops.InodeID, name string) (*git.TreeEntry, error) {
+	id, ok := im.byParent[coords{i, name}]
+	if ok {
+		return im.Get(id)
+	}
+
+	// Haven't seen this node before, look for it
+	parent, err := im.Get(i)
+	if err != nil {
+		return nil, err
+	}
+
+	tree, err := im.repo.LookupTree(parent.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	entry := tree.EntryByName(name)
+	if entry == nil {
+		return nil, fmt.Errorf("Inode %d has no child named %s", i, name)
+	}
+
+	im.lastIssuedID++
+	im.byId[im.lastIssuedID] = entry
+
+	return entry, nil
 }
 
 type GitROFS struct {
-	inodes  InodeMap
-	handles HandleMaker
-	repo    *git.Repository
-	uid     uint32
-	gid     uint32
+	inodes InodeMap
+	repo   *git.Repository
+	uid    uint32
+	gid    uint32
 }
 
 func NewGitROFS(repo *git.Repository) (GitROFS, error) {
@@ -105,12 +174,32 @@ func NewGitROFS(repo *git.Repository) (GitROFS, error) {
 		return GitROFS{}, err
 	}
 
+	// TODO: Take reference or commit in constructor
+	head, err := repo.Head()
+	if err != nil {
+		return GitROFS{}, err
+	}
+
+	obj, err := head.Peel(git.ObjectCommit)
+	if err != nil {
+		return GitROFS{}, err
+	}
+
+	commit, err := obj.AsCommit()
+	if err != nil {
+		return GitROFS{}, err
+	}
+
+	ins, err := NewInodeMap(repo, commit)
+	if err != nil {
+		return GitROFS{}, err
+	}
+
 	return GitROFS{
-		inodes:  NewInodeMap(),
-		handles: NewHandleMaker(),
-		repo:    repo,
-		uid:     uint32(uid),
-		gid:     uint32(gid),
+		inodes: ins,
+		repo:   repo,
+		uid:    uint32(uid),
+		gid:    uint32(gid),
 	}, nil
 }
 
@@ -144,32 +233,30 @@ func (fs GitROFS) FlushFile(ctx context.Context, op *fuseops.FlushFileOp) error 
 }
 
 func (fs GitROFS) ForgetInode(ctx context.Context, op *fuseops.ForgetInodeOp) error {
-	log.Printf("ForgetInode\n")
-	return fmt.Errorf("ForgetInode")
+	log.Printf("ForgetInode: inode %d\n", op.Inode)
+	// TODO: Something?
+	return nil
 }
 
 func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAttributesOp) error {
-	log.Printf("GetInodeAttributes: Inode %d\n", op.Inode)
-	if op.Inode == fuseops.RootInodeID {
-        // TODO: fn : git object -> fuseops.InodeAttributes
-		op.Attributes = fuseops.InodeAttributes{
-			Size:  0,
-			Nlink: 1,
-			Mode:  0555 | os.ModeDir,
+	log.Printf("GetInodeAttributes: inode %d\n", op.Inode)
 
-			Atime:  time.Now(),
-			Mtime:  time.Now(),
-			Ctime:  time.Now(),
-			Crtime: time.Now(),
-
-			Uid: fs.uid,
-			Gid: fs.gid,
-		}
-		op.AttributesExpiration = time.Now().Add(time.Duration(24) * time.Hour)
-
-		return nil
+	fs.inodes.Lock()
+	entry, err := fs.inodes.Get(op.Inode)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("GetInodeAttributes")
+	fs.inodes.Unlock()
+
+	att, err := fs.toInodeAttributes(entry)
+	if err != nil {
+		return err
+	}
+
+	op.Attributes = att
+	op.AttributesExpiration = time.Now().Add(time.Duration(24) * time.Hour)
+
+	return nil
 }
 
 func (fs GitROFS) GetXattr(ctx context.Context, op *fuseops.GetXattrOp) error {
@@ -193,79 +280,86 @@ func (fs GitROFS) MkNode(ctx context.Context, op *fuseops.MkNodeOp) error {
 }
 
 func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) error {
-	log.Printf("LookUpInode\n")
-	log.Printf(".. Parent %d\n", op.Parent)
-	log.Printf(".. Name %s\n", op.Name)
+	log.Printf("LookUpInode: Parent %d, name %s\n", op.Parent, op.Name)
 
 	fs.inodes.Lock()
+	entry, err := fs.inodes.Lookup(op.Parent, op.Name)
+	id := fs.inodes.lastIssuedID
 	defer fs.inodes.Unlock()
 
-	coords := InodeCoords{
-		parent: op.Parent,
-		name:   op.Name,
+	if err != nil {
+		return err
 	}
 
-	var n Inode
-	var ok bool
-	if n, ok = fs.inodes.nodes[coords]; !ok {
-		fs.inodes.lastIssuedID++
-
-		// TODO: Look up file/dir info in git repo
-		n = Inode{
-			node: fuseops.ChildInodeEntry{
-				Child: fs.inodes.lastIssuedID,
-				Attributes: fuseops.InodeAttributes{
-					Size:  0,
-					Nlink: 0,
-					Mode:  os.FileMode(0444),
-
-					Atime:  time.Now(),
-					Mtime:  time.Now(),
-					Ctime:  time.Now(),
-					Crtime: time.Now(),
-
-					Uid: fs.uid,
-					Gid: fs.gid,
-				},
-				AttributesExpiration: time.Now().Add(time.Duration(24) * time.Hour),
-				EntryExpiration:      time.Now().Add(time.Duration(24) * time.Hour),
-			},
-		}
-		fs.inodes.nodes[coords] = n
+	attrs, err := fs.toInodeAttributes(entry)
+	if err != nil {
+		return err
 	}
 
-	op.Entry = n.node
+	op.Entry = fuseops.ChildInodeEntry{
+		Child:                id,
+		Attributes:           attrs,
+		AttributesExpiration: time.Now().Add(time.Duration(24) * time.Hour),
+		EntryExpiration:      time.Now().Add(time.Duration(24) * time.Hour),
+	}
 
 	return nil
 }
 
 func (fs GitROFS) OpenDir(ctx context.Context, op *fuseops.OpenDirOp) error {
-	log.Printf("OpenDir\n")
-	log.Printf("Inode %d\n", op.Inode)
-	op.Handle = fs.handles.Issue()
+	log.Printf("OpenDir: inode %d\n", op.Inode)
 	// We can open all dirs
 	return nil
 }
 
 func (fs GitROFS) OpenFile(ctx context.Context, op *fuseops.OpenFileOp) error {
-	log.Printf("OpenFile\n")
+	log.Printf("OpenFile: inode %d\n", op.Inode)
 	return fmt.Errorf("OpenFile")
 }
 
 func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
-	log.Printf("ReadDir\n")
-	log.Printf(".. inode %d\n", op.Inode)
+	log.Printf("ReadDir: inode %d\n", op.Inode)
 
-	entries := []fuseutil.Dirent{
-		fuseutil.Dirent{
-			Inode:  fuseops.InodeID(2),
-			Name:   "file!",
-			Type:   fuseutil.DT_File,
-		},
+	entry, err := fs.inodes.Get(op.Inode)
+	if err != nil {
+		return err
 	}
 
-	for _, entry := range entries {
-		n := fuseutil.WriteDirent(op.Dst[op.BytesRead:], entry)
+	tree, err := fs.repo.LookupTree(entry.Id)
+	if err != nil {
+		return err
+	}
+
+	for i := uint64(0); i < tree.EntryCount(); i++ {
+		child := tree.EntryByIndex(i)
+
+		fs.inodes.Lock()
+		coord := coords{op.Inode, child.Name}
+		id, ok := fs.inodes.byParent[coord]
+		if !ok {
+			fs.inodes.lastIssuedID++
+			id = fs.inodes.lastIssuedID
+			fs.inodes.byParent[coord] = id
+			fs.inodes.byId[id] = child
+		}
+		fs.inodes.Unlock()
+
+		var tp fuseutil.DirentType
+		if child.Type == git.ObjectBlob {
+			tp = fuseutil.DT_File
+		} else if child.Type == git.ObjectTree {
+			tp = fuseutil.DT_Directory
+		} else {
+			return fmt.Errorf("Unexpected git object type %v", child.Type)
+		}
+
+		dirent := fuseutil.Dirent{
+			Inode: id,
+			Name:  child.Name,
+			Type:  tp,
+		}
+
+		n := fuseutil.WriteDirent(op.Dst[op.BytesRead:], dirent)
 		if n == 0 {
 			break
 		}
@@ -287,8 +381,9 @@ func (fs GitROFS) ReadSymlink(ctx context.Context, op *fuseops.ReadSymlinkOp) er
 }
 
 func (fs GitROFS) ReleaseDirHandle(ctx context.Context, op *fuseops.ReleaseDirHandleOp) error {
-	log.Printf("ReleaseDirHandle\n")
-	return fmt.Errorf("ReleaseDirHandle")
+	log.Printf("ReleaseDirHandle: handle %d\n", op.Handle)
+	// TODO: Something?
+	return nil
 }
 
 func (fs GitROFS) ReleaseFileHandle(ctx context.Context, op *fuseops.ReleaseFileHandleOp) error {
