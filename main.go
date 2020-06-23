@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -251,8 +253,8 @@ func (fs GitROFS) Fallocate(ctx context.Context, op *fuseops.FallocateOp) error 
 }
 
 func (fs GitROFS) FlushFile(ctx context.Context, op *fuseops.FlushFileOp) error {
-	log.Printf("FlushFile\n")
-	return fmt.Errorf("FlushFile")
+	log.Printf("FlushFile: inode %d\n", op.Inode)
+	return nil
 }
 
 func (fs GitROFS) ForgetInode(ctx context.Context, op *fuseops.ForgetInodeOp) error {
@@ -395,8 +397,29 @@ func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 }
 
 func (fs GitROFS) ReadFile(ctx context.Context, op *fuseops.ReadFileOp) error {
-	log.Printf("ReadFile\n")
-	return fmt.Errorf("ReadFile")
+	log.Printf("ReadFile: inode %d\n", op.Inode)
+	entry, err := fs.inodes.Get(op.Inode)
+	if err != nil {
+		return fuse.ENOENT
+	}
+
+	if entry.Type != git.ObjectBlob {
+		return fuse.EINVAL
+	}
+
+	blob, err := fs.repo.LookupBlob(entry.Id)
+	if err != nil {
+		return fuse.EIO
+	}
+
+	r := bytes.NewReader(blob.Contents())
+
+	op.BytesRead, err = r.ReadAt(op.Dst, op.Offset)
+	if err == io.EOF {
+		return nil
+	}
+
+	return err
 }
 
 func (fs GitROFS) ReadSymlink(ctx context.Context, op *fuseops.ReadSymlinkOp) error {
@@ -411,8 +434,8 @@ func (fs GitROFS) ReleaseDirHandle(ctx context.Context, op *fuseops.ReleaseDirHa
 }
 
 func (fs GitROFS) ReleaseFileHandle(ctx context.Context, op *fuseops.ReleaseFileHandleOp) error {
-	log.Printf("ReleaseFileHandle\n")
-	return fmt.Errorf("ReleaseFileHandle")
+	log.Printf("ReleaseFileHandle: handle %d\n", op.Handle)
+	return nil
 }
 
 func (fs GitROFS) RemoveXattr(ctx context.Context, op *fuseops.RemoveXattrOp) error {
