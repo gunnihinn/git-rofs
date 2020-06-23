@@ -112,7 +112,16 @@ func (fs GitROFS) toInodeAttributes(entry *git.TreeEntry) (fuseops.InodeAttribut
 			return attrs, err
 		}
 		attrs.Size = 0
-		attrs.Nlink = uint32(tree.EntryCount()) + 2
+
+		// http://teaching.idallen.com/dat2330/04f/notes/links_and_inodes.html
+		attrs.Nlink = 2
+		for i := uint64(0); i < tree.EntryCount(); i++ {
+			child := tree.EntryByIndex(i)
+			if child.Type == git.ObjectTree {
+				attrs.Nlink++
+			}
+		}
+
 		attrs.Mode = 0755 | os.ModeDir
 	} else {
 		return attrs, fmt.Errorf("Unexpected inode type %v", entry.Type)
