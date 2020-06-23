@@ -36,7 +36,12 @@ ARGUMENTS
 
 OPTIONS
 
-    -h, -help   Print help and exit
+    -commit HASH    Commit to check out
+    -h, -help       Print help and exit
+
+The argument to commit can be anything that git rev-parse can resolve
+into a commit hash.
+
 	`)
 
 type coords struct {
@@ -181,7 +186,7 @@ type GitROFS struct {
 	gid    uint32
 }
 
-func NewGitROFS(repo *git.Repository) (GitROFS, error) {
+func NewGitROFS(repo *git.Repository, commit *git.Commit) (GitROFS, error) {
 	fs := GitROFS{}
 
 	user, err := user.Current()
@@ -195,22 +200,6 @@ func NewGitROFS(repo *git.Repository) (GitROFS, error) {
 	}
 
 	gid, err := strconv.Atoi(user.Gid)
-	if err != nil {
-		return fs, err
-	}
-
-	// TODO: Take reference or commit in constructor
-	head, err := repo.Head()
-	if err != nil {
-		return fs, err
-	}
-
-	obj, err := head.Peel(git.ObjectCommit)
-	if err != nil {
-		return fs, err
-	}
-
-	commit, err := obj.AsCommit()
 	if err != nil {
 		return fs, err
 	}
@@ -487,9 +476,11 @@ func main() {
 	flags := struct {
 		help_s *bool
 		help_l *bool
+		commit *string
 	}{
 		help_s: flag.Bool("h", false, "Print help and exit"),
 		help_l: flag.Bool("help", false, "Print help and exit"),
+		commit: flag.String("commit", "HEAD", "Commit to check out"),
 	}
 	flag.Parse()
 
@@ -512,7 +503,17 @@ func main() {
 		log.Panic(err)
 	}
 
-	fs, err := NewGitROFS(repo)
+	obj, err := repo.RevparseSingle(*flags.commit)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	commit, err := obj.AsCommit()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	fs, err := NewGitROFS(repo, commit)
 	if err != nil {
 		log.Panic(err)
 	}
