@@ -218,45 +218,42 @@ func NewGitROFS(repo *git.Repository, commit *git.Commit) (GitROFS, error) {
 }
 
 func (fs GitROFS) CreateFile(ctx context.Context, op *fuseops.CreateFileOp) error {
-	logger.Debug("CreateFile")
+	logger.Debugw("CreateFile")
 	return fmt.Errorf("CreateFile")
 }
 
 func (fs GitROFS) CreateLink(ctx context.Context, op *fuseops.CreateLinkOp) error {
-	logger.Debug("CreateLink")
+	logger.Debugw("CreateLink")
 	return fmt.Errorf("CreateLink")
 }
 
 func (fs GitROFS) CreateSymlink(ctx context.Context, op *fuseops.CreateSymlinkOp) error {
-	logger.Debug("CreateSymlink")
+	logger.Debugw("CreateSymlink")
 	return fmt.Errorf("CreateSymlink")
 }
 
 func (fs GitROFS) Destroy() {
-	logger.Debug("Destroy")
+	logger.Debugw("Destroy")
 }
 
 func (fs GitROFS) Fallocate(ctx context.Context, op *fuseops.FallocateOp) error {
-	logger.Debug("Fallocate")
+	logger.Debugw("Fallocate")
 	return fmt.Errorf("Fallocate")
 }
 
 func (fs GitROFS) FlushFile(ctx context.Context, op *fuseops.FlushFileOp) error {
-	logger.Debug("FlushFile",
-		"inode", op.Inode)
+    logger.Debugw("FlushFile", "inode", op.Inode)
 	return nil
 }
 
 func (fs GitROFS) ForgetInode(ctx context.Context, op *fuseops.ForgetInodeOp) error {
-	logger.Debug("ForgetInode",
-		"inode", op.Inode)
+    logger.Debugw("ForgetInode", "inode", op.Inode)
 	// TODO: Something?
 	return nil
 }
 
 func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAttributesOp) error {
-	logger.Debug("GetInodeAttributes",
-		"inode", op.Inode)
+    logger.Debugw("GetInodeAttributes", "inode", op.Inode)
 
 	fs.inodes.Lock()
 	entry, err := fs.inodes.Get(op.Inode)
@@ -277,31 +274,27 @@ func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAt
 }
 
 func (fs GitROFS) GetXattr(ctx context.Context, op *fuseops.GetXattrOp) error {
-	logger.Debug("GetXattr",
-		"inode", op.Inode,
-		"name", op.Name)
+    logger.Debugw("GetXattr", "inode", op.Inode, "name", op.Name)
 	return fuse.ENOATTR
 }
 
 func (fs GitROFS) ListXattr(ctx context.Context, op *fuseops.ListXattrOp) error {
-	logger.Debug("ListXattr")
+	logger.Debugw("ListXattr")
 	return nil
 }
 
 func (fs GitROFS) MkDir(ctx context.Context, op *fuseops.MkDirOp) error {
-	logger.Debug("MkDir")
+	logger.Debugw("MkDir")
 	return fmt.Errorf("MkDir")
 }
 
 func (fs GitROFS) MkNode(ctx context.Context, op *fuseops.MkNodeOp) error {
-	logger.Debug("MkNode")
+	logger.Debugw("MkNode")
 	return fmt.Errorf("MkNode")
 }
 
 func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) error {
-	logger.Debug("LookUpInode",
-		"parent", op.Parent,
-		"name", op.Name)
+    logger.Debugw("LookUpInode", "parent", op.Parent, "name", op.Name)
 
 	fs.inodes.Lock()
 	id, entry, err := fs.inodes.Lookup(op.Parent, op.Name)
@@ -325,22 +318,17 @@ func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) er
 }
 
 func (fs GitROFS) OpenDir(ctx context.Context, op *fuseops.OpenDirOp) error {
-	logger.Debug("OpenDir",
-		"inode", op.Inode)
-	// We can open all dirs
-	return nil
-}
+    logger.Debugw("OpenDir", "inode", op.Inode)
+    // We can open all dirs
+    return nil }
 
 func (fs GitROFS) OpenFile(ctx context.Context, op *fuseops.OpenFileOp) error {
-	logger.Debug("OpenFile",
-		"inode", op.Inode)
-	// We can open all files
-	return nil
-}
+    logger.Debugw("OpenFile", "inode", op.Inode)
+    // We can open all files
+    return nil }
 
 func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
-	logger.Debug("ReadDir",
-		"inode", op.Inode)
+    logger.Debugw("ReadDir", "inode", op.Inode)
 
 	entry, err := fs.inodes.Get(op.Inode)
 	if err != nil {
@@ -373,7 +361,7 @@ func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 		} else if child.Type == git.ObjectTree {
 			tp = fuseutil.DT_Directory
 		} else {
-			logger.Error("Unexpected git object",
+			logger.Errorw("Unexpected git object",
 				"type", child.Type)
 			return fuse.EIO
 		}
@@ -397,12 +385,8 @@ func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 }
 
 func (fs GitROFS) ReadFile(ctx context.Context, op *fuseops.ReadFileOp) error {
-	logger.Debug("ReadFile",
-		"inode", op.Inode)
-	entry, err := fs.inodes.Get(op.Inode)
-	if err != nil {
-		return fuse.ENOENT
-	}
+    logger.Debugw("ReadFile", "inode", op.Inode) entry, err :=
+    fs.inodes.Get(op.Inode) if err != nil { return fuse.ENOENT }
 
 	if entry.Type != git.ObjectBlob {
 		return fuse.EINVAL
@@ -424,65 +408,60 @@ func (fs GitROFS) ReadFile(ctx context.Context, op *fuseops.ReadFileOp) error {
 }
 
 func (fs GitROFS) ReadSymlink(ctx context.Context, op *fuseops.ReadSymlinkOp) error {
-	logger.Debug("ReadSymlink")
+	logger.Debugw("ReadSymlink")
 	return fmt.Errorf("ReadSymlink")
 }
 
 func (fs GitROFS) ReleaseDirHandle(ctx context.Context, op *fuseops.ReleaseDirHandleOp) error {
-	logger.Debug("ReleaseDirHandle",
-		"handle", op.Handle)
-	// TODO: Something?
-	return nil
-}
+    logger.Debugw("ReleaseDirHandle", "handle", op.Handle)
+    // TODO: Something?
+    return nil }
 
 func (fs GitROFS) ReleaseFileHandle(ctx context.Context, op *fuseops.ReleaseFileHandleOp) error {
-	logger.Debug("ReleaseFileHandle",
-		"handle", op.Handle)
-	return nil
-}
+    logger.Debugw("ReleaseFileHandle", "handle", op.Handle) return nil }
 
 func (fs GitROFS) RemoveXattr(ctx context.Context, op *fuseops.RemoveXattrOp) error {
-	logger.Debug("RemoveXattr")
+	logger.Debugw("RemoveXattr")
 	return fmt.Errorf("RemoveXattr")
 }
 
 func (fs GitROFS) Rename(ctx context.Context, op *fuseops.RenameOp) error {
-	logger.Debug("Rename")
+	logger.Debugw("Rename")
 	return fmt.Errorf("Rename")
 }
 
 func (fs GitROFS) RmDir(ctx context.Context, op *fuseops.RmDirOp) error {
-	logger.Debug("RmDir")
+	logger.Debugw("RmDir")
 	return fmt.Errorf("RmDir")
 }
 
 func (fs GitROFS) SetInodeAttributes(ctx context.Context, op *fuseops.SetInodeAttributesOp) error {
-	logger.Debug("SetInodeAttributes")
+	logger.Debugw("SetInodeAttributes")
 	return fmt.Errorf("SetInodeAttributes")
 }
 
 func (fs GitROFS) SetXattr(ctx context.Context, op *fuseops.SetXattrOp) error {
-	logger.Debug("SetXattr")
+	logger.Debugw("SetXattr")
 	return fmt.Errorf("SetXattr")
 }
 
 func (fs GitROFS) StatFS(ctx context.Context, op *fuseops.StatFSOp) error {
-	logger.Debug("StatFS")
+	logger.Debugw("StatFS")
 	return fmt.Errorf("StatFS")
 }
 
 func (fs GitROFS) SyncFile(ctx context.Context, op *fuseops.SyncFileOp) error {
-	logger.Debug("SyncFile")
+	logger.Debugw("SyncFile")
 	return fmt.Errorf("SyncFile")
 }
 
 func (fs GitROFS) Unlink(ctx context.Context, op *fuseops.UnlinkOp) error {
-	logger.Debug("Unlink")
+	logger.Debugw("Unlink")
 	return fmt.Errorf("Unlink")
 }
 
 func (fs GitROFS) WriteFile(ctx context.Context, op *fuseops.WriteFileOp) error {
-	logger.Debug("WriteFile")
+	logger.Debugw("WriteFile")
 	return fmt.Errorf("WriteFile")
 }
 
@@ -541,10 +520,10 @@ func main() {
 		logger.Panic(err)
 	}
 
-	logger.Info("Creating server")
+	logger.Infow("Creating server")
 	server := fuseutil.NewFileSystemServer(fs)
 
-	logger.Info("Mounting filesystem")
+	logger.Infow("Mounting filesystem")
 	mfs, err := fuse.Mount(mountPoint, server, &fuse.MountConfig{})
 	if err != nil {
 		logger.Panic(err)
@@ -555,13 +534,13 @@ func main() {
 
 	go func() {
 		<-sigs
-		logger.Info("Unmounting filesystem")
+		logger.Infow("Unmounting filesystem")
 		if err := fuse.Unmount(mountPoint); err != nil {
 			logger.Panic(err)
 		}
 	}()
 
-	logger.Info("Serving files")
+	logger.Infow("Serving files")
 	mfs.Join(context.Background())
-	logger.Info("Done")
+	logger.Infow("Done")
 }
