@@ -1,0 +1,42 @@
+= Git ROFS
+
+Git ROFS is a read-only FUSE filesystem for Git repositories. It is more
+or less equivalent to a read-only version of `git checkout`, except it
+doesn't do any writes to disk.
+
+== Use
+
+The requirements to build the program are:
+
+* `go` >= 1.12
+* `libgit2` >= 0.27
+* `libfuse`
+
+The Go dependencies use CGo and may require `pkg-config` and a C compiler
+as well. To build the program, run:
+
+[source,bash]
+----
+make
+----
+
+To install it to `$prefix` (default `$HOME/bin`):
+
+[source,bash]
+----
+make install
+----
+
+Run the program with:
+
+[source,bash]
+----
+git-rofs [OPTION]... ROOT MOUNTPOINT
+----
+
+`ROOT` is the Git repository to look at. `MOUNTPOINT` is a directory
+where the repository should be mounted.
+
+By default, the program will mount the given repository at its current
+`HEAD`. This is not very interesting. To mount it at anything that `git
+rev-parse` can resolve into a commit hash, use the `-commit REF` option.

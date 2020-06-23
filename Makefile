@@ -1,9 +1,8 @@
-run: git-rofs
-	./git-rofs . /tmp/nofs
-
-debug: main.go
-	dlv debug $< -- . /tmp/nofs
-	sudo umount /tmp/nofs
+prefix ?= $(HOME)
+out := $(prefix)/bin
 
 git-rofs: main.go
 	go build -o $@ $<
+
+install: git-rofs
+	install -D $< $(out)/$<
