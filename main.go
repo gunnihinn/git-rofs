@@ -19,6 +19,7 @@ import (
 	"github.com/jacobsa/fuse/fuseops"
 	"github.com/jacobsa/fuse/fuseutil"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"gopkg.in/libgit2/git2go.v27"
 )
 
@@ -37,6 +38,7 @@ ARGUMENTS
 OPTIONS
 
     -commit HASH    Commit to check out
+    -verbose        Print debug log messages
     -h, -help       Print help and exit
 
 The argument to commit can be anything that git rev-parse can resolve
@@ -242,18 +244,18 @@ func (fs GitROFS) Fallocate(ctx context.Context, op *fuseops.FallocateOp) error 
 }
 
 func (fs GitROFS) FlushFile(ctx context.Context, op *fuseops.FlushFileOp) error {
-    logger.Debugw("FlushFile", "inode", op.Inode)
+	logger.Debugw("FlushFile", "inode", op.Inode)
 	return nil
 }
 
 func (fs GitROFS) ForgetInode(ctx context.Context, op *fuseops.ForgetInodeOp) error {
-    logger.Debugw("ForgetInode", "inode", op.Inode)
+	logger.Debugw("ForgetInode", "inode", op.Inode)
 	// TODO: Something?
 	return nil
 }
 
 func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAttributesOp) error {
-    logger.Debugw("GetInodeAttributes", "inode", op.Inode)
+	logger.Debugw("GetInodeAttributes", "inode", op.Inode)
 
 	fs.inodes.Lock()
 	entry, err := fs.inodes.Get(op.Inode)
@@ -274,7 +276,7 @@ func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAt
 }
 
 func (fs GitROFS) GetXattr(ctx context.Context, op *fuseops.GetXattrOp) error {
-    logger.Debugw("GetXattr", "inode", op.Inode, "name", op.Name)
+	logger.Debugw("GetXattr", "inode", op.Inode, "name", op.Name)
 	return fuse.ENOATTR
 }
 
@@ -294,11 +296,11 @@ func (fs GitROFS) MkNode(ctx context.Context, op *fuseops.MkNodeOp) error {
 }
 
 func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) error {
-    logger.Debugw("LookUpInode", "parent", op.Parent, "name", op.Name)
+	logger.Debugw("LookUpInode", "parent", op.Parent, "name", op.Name)
 
 	fs.inodes.Lock()
 	id, entry, err := fs.inodes.Lookup(op.Parent, op.Name)
-	defer fs.inodes.Unlock()
+	fs.inodes.Unlock()
 
 	if err != nil {
 		return err
@@ -318,19 +320,23 @@ func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) er
 }
 
 func (fs GitROFS) OpenDir(ctx context.Context, op *fuseops.OpenDirOp) error {
-    logger.Debugw("OpenDir", "inode", op.Inode)
-    // We can open all dirs
-    return nil }
+	logger.Debugw("OpenDir", "inode", op.Inode)
+	// We can open all dirs
+	return nil
+}
 
 func (fs GitROFS) OpenFile(ctx context.Context, op *fuseops.OpenFileOp) error {
-    logger.Debugw("OpenFile", "inode", op.Inode)
-    // We can open all files
-    return nil }
+	logger.Debugw("OpenFile", "inode", op.Inode)
+	// We can open all files
+	return nil
+}
 
 func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
-    logger.Debugw("ReadDir", "inode", op.Inode)
+	logger.Debugw("ReadDir", "inode", op.Inode)
 
+	fs.inodes.Lock()
 	entry, err := fs.inodes.Get(op.Inode)
+	fs.inodes.Unlock()
 	if err != nil {
 		return err
 	}
@@ -385,8 +391,14 @@ func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 }
 
 func (fs GitROFS) ReadFile(ctx context.Context, op *fuseops.ReadFileOp) error {
-    logger.Debugw("ReadFile", "inode", op.Inode) entry, err :=
-    fs.inodes.Get(op.Inode) if err != nil { return fuse.ENOENT }
+	logger.Debugw("ReadFile", "inode", op.Inode)
+
+	fs.inodes.Lock()
+	entry, err := fs.inodes.Get(op.Inode)
+	fs.inodes.Unlock()
+	if err != nil {
+		return fuse.ENOENT
+	}
 
 	if entry.Type != git.ObjectBlob {
 		return fuse.EINVAL
@@ -413,12 +425,15 @@ func (fs GitROFS) ReadSymlink(ctx context.Context, op *fuseops.ReadSymlinkOp) er
 }
 
 func (fs GitROFS) ReleaseDirHandle(ctx context.Context, op *fuseops.ReleaseDirHandleOp) error {
-    logger.Debugw("ReleaseDirHandle", "handle", op.Handle)
-    // TODO: Something?
-    return nil }
+	logger.Debugw("ReleaseDirHandle", "handle", op.Handle)
+	// TODO: Something?
+	return nil
+}
 
 func (fs GitROFS) ReleaseFileHandle(ctx context.Context, op *fuseops.ReleaseFileHandleOp) error {
-    logger.Debugw("ReleaseFileHandle", "handle", op.Handle) return nil }
+	logger.Debugw("ReleaseFileHandle", "handle", op.Handle)
+	return nil
+}
 
 func (fs GitROFS) RemoveXattr(ctx context.Context, op *fuseops.RemoveXattrOp) error {
 	logger.Debugw("RemoveXattr")
@@ -468,21 +483,16 @@ func (fs GitROFS) WriteFile(ctx context.Context, op *fuseops.WriteFileOp) error 
 var logger *zap.SugaredLogger
 
 func main() {
-	l, err := zap.NewProduction()
-	if err != nil {
-		panic(err)
-	}
-	defer l.Sync()
-	logger = l.Sugar()
-
 	flags := struct {
-		help_s *bool
-		help_l *bool
-		commit *string
+		help_s  *bool
+		help_l  *bool
+		commit  *string
+		verbose *bool
 	}{
-		help_s: flag.Bool("h", false, "Print help and exit"),
-		help_l: flag.Bool("help", false, "Print help and exit"),
-		commit: flag.String("commit", "HEAD", "Commit to check out"),
+		help_s:  flag.Bool("h", false, "Print help and exit"),
+		help_l:  flag.Bool("help", false, "Print help and exit"),
+		commit:  flag.String("commit", "HEAD", "Commit to check out"),
+		verbose: flag.Bool("verbose", false, "Debug logging"),
 	}
 	flag.Parse()
 
@@ -496,6 +506,17 @@ func main() {
 		fmt.Printf("%s\n", msgHelp)
 		os.Exit(1)
 	}
+
+	logcfg := zap.NewProductionConfig()
+	if *flags.verbose {
+		logcfg.Level.SetLevel(zapcore.DebugLevel)
+	}
+	l, err := logcfg.Build()
+	if err != nil {
+		panic(err)
+	}
+	defer l.Sync()
+	logger = l.Sugar()
 
 	root := flag.Arg(0)
 	mountPoint := flag.Arg(1)

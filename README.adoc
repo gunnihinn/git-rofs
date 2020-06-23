@@ -41,6 +41,8 @@ By default, the program will mount the given repository at its current
 `HEAD`. This is not very interesting. To mount it at anything that `git
 rev-parse` can resolve into a commit hash, use the `-commit REF` option.
 
+Run `git-rofs -h` or `git-rofs -help` to see all available options.
+
 == Possible applications
 
 * Look at the state of a repository at various points in its history.
