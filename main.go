@@ -106,7 +106,12 @@ func (fs GitROFS) toInodeAttributes(entry *git.TreeEntry) (fuseops.InodeAttribut
 		}
 		attrs.Size = uint64(blob.Size())
 		attrs.Nlink = 1
-		attrs.Mode = os.FileMode(0644)
+		if entry.Filemode == git.FilemodeBlob {
+			attrs.Mode = os.FileMode(0644)
+		} else if entry.Filemode == git.FilemodeBlobExecutable {
+			attrs.Mode = os.FileMode(0755)
+		}
+		// TODO: Deal with git.FilemodeLink
 	} else if entry.Type == git.ObjectTree {
 		tree, err := fs.repo.LookupTree(entry.Id)
 		if err != nil {
@@ -329,7 +334,8 @@ func (fs GitROFS) OpenDir(ctx context.Context, op *fuseops.OpenDirOp) error {
 
 func (fs GitROFS) OpenFile(ctx context.Context, op *fuseops.OpenFileOp) error {
 	log.Printf("OpenFile: inode %d\n", op.Inode)
-	return fmt.Errorf("OpenFile")
+	// We can open all files
+	return nil
 }
 
 func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
