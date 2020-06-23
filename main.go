@@ -278,13 +278,13 @@ func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAt
 }
 
 func (fs GitROFS) GetXattr(ctx context.Context, op *fuseops.GetXattrOp) error {
-	log.Printf("GetXattr\n")
-	return fmt.Errorf("GetXattr")
+	log.Printf("GetXattr: inode %d, name %s\n", op.Inode, op.Name)
+	return fuse.ENOATTR
 }
 
 func (fs GitROFS) ListXattr(ctx context.Context, op *fuseops.ListXattrOp) error {
 	log.Printf("ListXattr\n")
-	return fmt.Errorf("ListXattr")
+	return nil
 }
 
 func (fs GitROFS) MkDir(ctx context.Context, op *fuseops.MkDirOp) error {
