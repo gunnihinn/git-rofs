@@ -306,10 +306,8 @@ func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) er
 	}
 
 	op.Entry = fuseops.ChildInodeEntry{
-		Child:                id,
-		Attributes:           attrs,
-		AttributesExpiration: time.Now().Add(time.Duration(24) * time.Hour),
-		EntryExpiration:      time.Now().Add(time.Duration(24) * time.Hour),
+		Child:      id,
+		Attributes: attrs,
 	}
 
 	return nil
