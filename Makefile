@@ -1,5 +1,9 @@
-run: go-rofs
-	./go-rofs . /tmp/nofs
+run: git-rofs
+	./git-rofs . /tmp/nofs
 
-go-rofs: main.go
+debug: main.go
+	dlv debug $< -- . /tmp/nofs
+	sudo umount /tmp/nofs
+
+git-rofs: main.go
 	go build -o $@ $<

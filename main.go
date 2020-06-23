@@ -50,8 +50,8 @@ type InodeMap struct {
 	lastIssuedID fuseops.InodeID
 }
 
-func NewInodeMap(repo *git.Repository, root *git.Commit) (InodeMap, error) {
-	im := InodeMap{
+func NewInodeMap(repo *git.Repository, root *git.Commit) (*InodeMap, error) {
+	im := &InodeMap{
 		Mutex:        &sync.Mutex{},
 		byId:         make(map[fuseops.InodeID]*git.TreeEntry),
 		byParent:     make(map[coords]fuseops.InodeID),
@@ -88,12 +88,13 @@ func (im InodeMap) Get(i fuseops.InodeID) (*git.TreeEntry, error) {
 }
 
 func (fs GitROFS) toInodeAttributes(entry *git.TreeEntry) (fuseops.InodeAttributes, error) {
+	now := time.Now()
 	attrs := fuseops.InodeAttributes{
 		// TODO: What is time?
-		Atime:  time.Now(),
-		Mtime:  time.Now(),
-		Ctime:  time.Now(),
-		Crtime: time.Now(),
+		Atime:  now,
+		Mtime:  now,
+		Ctime:  now,
+		Crtime: now,
 		Uid:    fs.uid,
 		Gid:    fs.gid,
 	}
@@ -105,7 +106,7 @@ func (fs GitROFS) toInodeAttributes(entry *git.TreeEntry) (fuseops.InodeAttribut
 		}
 		attrs.Size = uint64(blob.Size())
 		attrs.Nlink = 1
-		attrs.Mode = 0644
+		attrs.Mode = os.FileMode(0644)
 	} else if entry.Type == git.ObjectTree {
 		tree, err := fs.repo.LookupTree(entry.Id)
 		if err != nil {
@@ -122,7 +123,7 @@ func (fs GitROFS) toInodeAttributes(entry *git.TreeEntry) (fuseops.InodeAttribut
 			}
 		}
 
-		attrs.Mode = 0755 | os.ModeDir
+		attrs.Mode = os.ModeDir | os.FileMode(0755)
 	} else {
 		return attrs, fmt.Errorf("Unexpected inode type %v", entry.Type)
 	}
@@ -132,84 +133,92 @@ func (fs GitROFS) toInodeAttributes(entry *git.TreeEntry) (fuseops.InodeAttribut
 
 // Lookup gets a child of a given inode by name.
 // Caller must lock/unlock mutex.
-func (im InodeMap) Lookup(i fuseops.InodeID, name string) (*git.TreeEntry, error) {
-	id, ok := im.byParent[coords{i, name}]
+func (im *InodeMap) Lookup(i fuseops.InodeID, name string) (fuseops.InodeID, *git.TreeEntry, error) {
+	coord := coords{i, name}
+	id, ok := im.byParent[coord]
 	if ok {
-		return im.Get(id)
+		node, err := im.Get(id)
+		if err != nil {
+			return id, node, fuse.EIO
+		}
+		return id, node, nil
 	}
 
 	// Haven't seen this node before, look for it
 	parent, err := im.Get(i)
 	if err != nil {
-		return nil, err
+		return id, nil, fuse.EIO
 	}
 
 	tree, err := im.repo.LookupTree(parent.Id)
 	if err != nil {
-		return nil, err
+		return id, nil, fuse.EIO
 	}
 
 	entry := tree.EntryByName(name)
 	if entry == nil {
-		return nil, fmt.Errorf("Inode %d has no child named %s", i, name)
+		return id, nil, fuse.ENOENT
 	}
 
-	im.lastIssuedID++
+	im.lastIssuedID += 1
 	im.byId[im.lastIssuedID] = entry
+	im.byParent[coord] = im.lastIssuedID
 
-	return entry, nil
+	return im.lastIssuedID, entry, nil
 }
 
 type GitROFS struct {
-	inodes InodeMap
+	inodes *InodeMap
 	repo   *git.Repository
 	uid    uint32
 	gid    uint32
 }
 
 func NewGitROFS(repo *git.Repository) (GitROFS, error) {
+	fs := GitROFS{}
+
 	user, err := user.Current()
 	if err != nil {
-		return GitROFS{}, err
+		return fs, err
 	}
 
 	uid, err := strconv.Atoi(user.Uid)
 	if err != nil {
-		return GitROFS{}, err
+		return fs, err
 	}
 
 	gid, err := strconv.Atoi(user.Gid)
 	if err != nil {
-		return GitROFS{}, err
+		return fs, err
 	}
 
 	// TODO: Take reference or commit in constructor
 	head, err := repo.Head()
 	if err != nil {
-		return GitROFS{}, err
+		return fs, err
 	}
 
 	obj, err := head.Peel(git.ObjectCommit)
 	if err != nil {
-		return GitROFS{}, err
+		return fs, err
 	}
 
 	commit, err := obj.AsCommit()
 	if err != nil {
-		return GitROFS{}, err
+		return fs, err
 	}
 
 	ins, err := NewInodeMap(repo, commit)
 	if err != nil {
-		return GitROFS{}, err
+		return fs, err
 	}
 
-	return GitROFS{
-		inodes: ins,
-		repo:   repo,
-		uid:    uint32(uid),
-		gid:    uint32(gid),
-	}, nil
+	fs.inodes = ins
+	fs.repo = repo
+	fs.uid = uint32(uid)
+	fs.gid = uint32(gid)
+
+	return fs, nil
 }
 
 func (fs GitROFS) CreateFile(ctx context.Context, op *fuseops.CreateFileOp) error {
@@ -259,11 +268,11 @@ func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAt
 
 	att, err := fs.toInodeAttributes(entry)
 	if err != nil {
-		return err
+		log.Printf("ERROR: %s\n", err)
+		return fuse.ENOATTR
 	}
 
 	op.Attributes = att
-	op.AttributesExpiration = time.Now().Add(time.Duration(24) * time.Hour)
 
 	return nil
 }
@@ -292,8 +301,7 @@ func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) er
 	log.Printf("LookUpInode: Parent %d, name %s\n", op.Parent, op.Name)
 
 	fs.inodes.Lock()
-	entry, err := fs.inodes.Lookup(op.Parent, op.Name)
-	id := fs.inodes.lastIssuedID
+	id, entry, err := fs.inodes.Lookup(op.Parent, op.Name)
 	defer fs.inodes.Unlock()
 
 	if err != nil {
@@ -337,19 +345,20 @@ func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 		return err
 	}
 
-	for i := uint64(0); i < tree.EntryCount(); i++ {
+	ec := tree.EntryCount()
+	if op.Offset > fuseops.DirOffset(ec) {
+		return fuse.EIO
+	}
+
+	for i := uint64(op.Offset); i < ec; i++ {
 		child := tree.EntryByIndex(i)
 
 		fs.inodes.Lock()
-		coord := coords{op.Inode, child.Name}
-		id, ok := fs.inodes.byParent[coord]
-		if !ok {
-			fs.inodes.lastIssuedID++
-			id = fs.inodes.lastIssuedID
-			fs.inodes.byParent[coord] = id
-			fs.inodes.byId[id] = child
-		}
+		id, _, err := fs.inodes.Lookup(op.Inode, child.Name)
 		fs.inodes.Unlock()
+		if err != nil {
+			return err
+		}
 
 		var tp fuseutil.DirentType
 		if child.Type == git.ObjectBlob {
@@ -357,13 +366,15 @@ func (fs GitROFS) ReadDir(ctx context.Context, op *fuseops.ReadDirOp) error {
 		} else if child.Type == git.ObjectTree {
 			tp = fuseutil.DT_Directory
 		} else {
-			return fmt.Errorf("Unexpected git object type %v", child.Type)
+			log.Printf("ERROR: Unexpected git object type %v", child.Type)
+			return fuse.EIO
 		}
 
 		dirent := fuseutil.Dirent{
-			Inode: id,
-			Name:  child.Name,
-			Type:  tp,
+			Offset: fuseops.DirOffset(i) + 1, // [sic]
+			Inode:  id,
+			Name:   child.Name,
+			Type:   tp,
 		}
 
 		n := fuseutil.WriteDirent(op.Dst[op.BytesRead:], dirent)
