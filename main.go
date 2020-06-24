@@ -183,11 +183,41 @@ func (im *InodeMap) Lookup(i fuseops.InodeID, name string) (fuseops.InodeID, *gi
 	return im.lastIssuedID, entry, nil
 }
 
+type AttrCache struct {
+	attrs map[fuseops.InodeID]fuseops.InodeAttributes
+	*sync.Mutex
+}
+
+func NewAttrCache() *AttrCache {
+	return &AttrCache{
+		attrs: make(map[fuseops.InodeID]fuseops.InodeAttributes),
+		Mutex: new(sync.Mutex),
+	}
+}
+
+func (fs GitROFS) lookupInodeAttributes(id fuseops.InodeID, entry *git.TreeEntry) (fuseops.InodeAttributes, error) {
+	fs.attrcache.Lock()
+	defer fs.attrcache.Unlock()
+
+	attrs, ok := fs.attrcache.attrs[id]
+	var err error
+	if !ok {
+		attrs, err = fs.toInodeAttributes(entry)
+		if err != nil {
+			return attrs, err
+		}
+		fs.attrcache.attrs[id] = attrs
+	}
+
+	return attrs, nil
+}
+
 type GitROFS struct {
-	inodes *InodeMap
-	repo   *git.Repository
-	uid    uint32
-	gid    uint32
+	inodes    *InodeMap
+	repo      *git.Repository
+	uid       uint32
+	gid       uint32
+	attrcache *AttrCache
 }
 
 func NewGitROFS(repo *git.Repository, commit *git.Commit) (GitROFS, error) {
@@ -217,6 +247,7 @@ func NewGitROFS(repo *git.Repository, commit *git.Commit) (GitROFS, error) {
 	fs.repo = repo
 	fs.uid = uint32(uid)
 	fs.gid = uint32(gid)
+	fs.attrcache = NewAttrCache()
 
 	return fs, nil
 }
@@ -266,7 +297,7 @@ func (fs GitROFS) GetInodeAttributes(ctx context.Context, op *fuseops.GetInodeAt
 	}
 	fs.inodes.Unlock()
 
-	att, err := fs.toInodeAttributes(entry)
+	att, err := fs.lookupInodeAttributes(op.Inode, entry)
 	if err != nil {
 		logger.Error(err)
 		return fuse.ENOATTR
@@ -308,7 +339,7 @@ func (fs GitROFS) LookUpInode(ctx context.Context, op *fuseops.LookUpInodeOp) er
 		return err
 	}
 
-	attrs, err := fs.toInodeAttributes(entry)
+	attrs, err := fs.lookupInodeAttributes(id, entry)
 	if err != nil {
 		return err
 	}
