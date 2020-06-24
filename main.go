@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
+	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -482,17 +484,34 @@ func (fs GitROFS) WriteFile(ctx context.Context, op *fuseops.WriteFileOp) error 
 
 var logger *zap.SugaredLogger
 
+func setupLogger(debug bool) (*zap.Logger, error) {
+	logcfg := zap.NewProductionConfig()
+	if debug {
+		logcfg.Level.SetLevel(zapcore.DebugLevel)
+	}
+	l, err := logcfg.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	return l, nil
+}
+
 func main() {
 	flags := struct {
 		help_s  *bool
 		help_l  *bool
 		commit  *string
 		verbose *bool
+		cpuprof *string
+		memprof *string
 	}{
 		help_s:  flag.Bool("h", false, "Print help and exit"),
 		help_l:  flag.Bool("help", false, "Print help and exit"),
 		commit:  flag.String("commit", "HEAD", "Commit to check out"),
 		verbose: flag.Bool("verbose", false, "Debug logging"),
+		cpuprof: flag.String("cpu-profile", "", "Write CPU profile to given file"),
+		memprof: flag.String("mem-profile", "", "Write memory profile to given file"),
 	}
 	flag.Parse()
 
@@ -507,23 +526,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	logcfg := zap.NewProductionConfig()
-	if *flags.verbose {
-		logcfg.Level.SetLevel(zapcore.DebugLevel)
-	}
-	l, err := logcfg.Build()
+	l, err := setupLogger(*flags.verbose)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "Couldn't initialize logging: %s\n", err)
+		os.Exit(1)
 	}
 	defer l.Sync()
 	logger = l.Sugar()
 
+	if *flags.cpuprof != "" {
+		fh, err := os.Create(*flags.cpuprof)
+		if err != nil {
+			logger.Fatalw("Couldn't create CPU profile file", "error", err)
+		}
+		defer fh.Close()
+
+		if err := pprof.StartCPUProfile(fh); err != nil {
+			logger.Fatalw("Couldn't start CPU profile", "error", err)
+		}
+		defer pprof.StopCPUProfile()
+	}
+
+	// Start main program setup
 	root := flag.Arg(0)
 	mountPoint := flag.Arg(1)
 
 	repo, err := git.OpenRepository(root)
 	if err != nil {
-		logger.Panic(err)
+		logger.Fatal(err)
 	}
 
 	obj, err := repo.RevparseSingle(*flags.commit)
@@ -563,5 +593,19 @@ func main() {
 
 	logger.Infow("Serving files")
 	mfs.Join(context.Background())
+
+	if *flags.memprof != "" {
+		fh, err := os.Create(*flags.memprof)
+		if err != nil {
+			logger.Fatalw("Couldn't create memory profile file", "error", err)
+		}
+		defer fh.Close()
+
+		runtime.GC()
+		if err := pprof.WriteHeapProfile(fh); err != nil {
+			logger.Fatalw("Couldn't write memory profile", "error", err)
+		}
+	}
+
 	logger.Infow("Done")
 }
