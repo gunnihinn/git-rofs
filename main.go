@@ -553,22 +553,22 @@ func main() {
 
 	repo, err := git.OpenRepository(root)
 	if err != nil {
-		logger.Fatal(err)
+		logger.Fatalw("Couldn't open repository", "error", err)
 	}
 
 	obj, err := repo.RevparseSingle(*flags.commit)
 	if err != nil {
-		logger.Panic(err)
+		logger.Fatalw("Couldn't rev-parse input", "error", err)
 	}
 
 	commit, err := obj.AsCommit()
 	if err != nil {
-		logger.Panic(err)
+		logger.Fatalw("Couldn't lookup commit", "error", err)
 	}
 
 	fs, err := NewGitROFS(repo, commit)
 	if err != nil {
-		logger.Panic(err)
+		logger.Fatalw("Couldn't initialize GitROFS struct", "error", err)
 	}
 
 	logger.Infow("Creating server")
@@ -577,7 +577,7 @@ func main() {
 	logger.Infow("Mounting filesystem")
 	mfs, err := fuse.Mount(mountPoint, server, &fuse.MountConfig{})
 	if err != nil {
-		logger.Panic(err)
+		logger.Fatalw("Couldn't mount filesystem", "error", err)
 	}
 
 	sigs := make(chan os.Signal, 1)
@@ -587,7 +587,7 @@ func main() {
 		<-sigs
 		logger.Infow("Unmounting filesystem")
 		if err := fuse.Unmount(mountPoint); err != nil {
-			logger.Panic(err)
+			logger.Fatalw("Couldn't unmount filesystem", "error", err)
 		}
 	}()
 
