@@ -111,7 +111,7 @@ func (fs GitROFS) toInodeAttributes(entry *git.TreeEntry) (fuseops.InodeAttribut
 	}
 
 	if entry.Type == git.ObjectBlob {
-		blob, err := fs.repo.LookupBlob(entry.Id)
+		blob, err := fs.lookupBlob(entry.Id)
 		if err != nil {
 			return attrs, err
 		}
@@ -196,20 +196,49 @@ func NewAttrCache() *AttrCache {
 }
 
 func (fs GitROFS) lookupInodeAttributes(id fuseops.InodeID, entry *git.TreeEntry) (fuseops.InodeAttributes, error) {
-	fs.attrcache.Lock()
-	defer fs.attrcache.Unlock()
+	fs.attrCache.Lock()
+	defer fs.attrCache.Unlock()
 
-	attrs, ok := fs.attrcache.attrs[id]
+	attrs, ok := fs.attrCache.attrs[id]
 	var err error
 	if !ok {
 		attrs, err = fs.toInodeAttributes(entry)
 		if err != nil {
 			return attrs, err
 		}
-		fs.attrcache.attrs[id] = attrs
+		fs.attrCache.attrs[id] = attrs
 	}
 
 	return attrs, nil
+}
+
+type BlobCache struct {
+	blobs map[*git.Oid]*git.Blob
+	*sync.Mutex
+}
+
+func NewBlobCache() *BlobCache {
+	return &BlobCache{
+		blobs: make(map[*git.Oid]*git.Blob),
+		Mutex: new(sync.Mutex),
+	}
+}
+
+func (fs GitROFS) lookupBlob(id *git.Oid) (*git.Blob, error) {
+	fs.blobCache.Lock()
+	defer fs.blobCache.Unlock()
+
+	blob, ok := fs.blobCache.blobs[id]
+	var err error
+	if !ok {
+		blob, err = fs.repo.LookupBlob(id)
+		if err != nil {
+			return blob, err
+		}
+		fs.blobCache.blobs[id] = blob
+	}
+
+	return blob, nil
 }
 
 type GitROFS struct {
@@ -217,7 +246,8 @@ type GitROFS struct {
 	repo      *git.Repository
 	uid       uint32
 	gid       uint32
-	attrcache *AttrCache
+	attrCache *AttrCache
+	blobCache *BlobCache
 }
 
 func NewGitROFS(repo *git.Repository, commit *git.Commit) (GitROFS, error) {
@@ -247,7 +277,8 @@ func NewGitROFS(repo *git.Repository, commit *git.Commit) (GitROFS, error) {
 	fs.repo = repo
 	fs.uid = uint32(uid)
 	fs.gid = uint32(gid)
-	fs.attrcache = NewAttrCache()
+	fs.attrCache = NewAttrCache()
+	fs.blobCache = NewBlobCache()
 
 	return fs, nil
 }
@@ -437,7 +468,7 @@ func (fs GitROFS) ReadFile(ctx context.Context, op *fuseops.ReadFileOp) error {
 		return fuse.EINVAL
 	}
 
-	blob, err := fs.repo.LookupBlob(entry.Id)
+	blob, err := fs.lookupBlob(entry.Id)
 	if err != nil {
 		return fuse.EIO
 	}
