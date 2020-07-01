@@ -8,8 +8,8 @@ doesn't do any writes to disk.
 
 The requirements to build the program are:
 
-* `go` >= 1.12
-* `libgit2` >= 0.27
+* `go >= 1.12`
+* `libgit2 >= 0.27`
 * `libfuse`
 
 The Go dependencies use CGo and may require `pkg-config` and a C compiler
@@ -58,8 +58,6 @@ in a worktree.
 * Change the reference that is checked out at runtime via some IPC mechanism.
 
 * Create mountpoints if they don't exist. Clean them up on exit.
-
-*
 
 == Prior art
 
